@@ -5,6 +5,8 @@ venv/
 .env
 .stop
 .redemption_queue.json
+dashboard/state.json
+dashboard/state.json.tmp
 data/
 output/
 .DS_Store

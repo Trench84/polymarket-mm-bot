@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Polymarket MM Bot</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:            #f9f9f7;
+    --surface-1:       #fcfcfb;
+    --surface-2:       #f3f2ee;
+    --text-primary:    #0b0b0b;
+    --text-secondary:  #52514e;
+    --text-muted:      #898781;
+    --gridline:        #e1e0d9;
+    --baseline:        #c3c2b7;
+    --border:          rgba(11,11,11,0.10);
+    --success-text:    #006300;
+
+    --series-up:       #2a78d6;
+    --series-down:     #eb6834;
+    --diverging-pos:   #2a78d6;
+    --diverging-neg:   #e34948;
+    --diverging-mid:   #e1e0d9;
+
+    --status-good:     #0ca30c;
+    --status-warning:  #fab219;
+    --status-serious:  #ec835a;
+    --status-critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page:            #0d0d0d;
+      --surface-1:       #1a1a19;
+      --surface-2:       #232322;
+      --text-primary:    #ffffff;
+      --text-secondary:  #c3c2b7;
+      --text-muted:      #898781;
+      --gridline:        #2c2c2a;
+      --baseline:        #383835;
+      --border:          rgba(255,255,255,0.10);
+      --success-text:    #0ca30c;
+
+      --series-up:       #3987e5;
+      --series-down:     #d95926;
+      --diverging-pos:   #3987e5;
+      --diverging-neg:   #e66767;
+      --diverging-mid:   #383835;
+
+      --status-good:     #0ca30c;
+      --status-warning:  #fab219;
+      --status-serious:  #ec835a;
+      --status-critical: #d03b3b;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 20px 60px; }
+
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 14px 18px; margin-bottom: 18px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; flex: 1; min-width: 160px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+    letter-spacing: .03em; text-transform: uppercase;
+  }
+  .badge-dry   { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
+  .badge-live  { background: color-mix(in srgb, var(--status-warning) 20%, transparent); color: var(--text-primary); border: 1px solid var(--status-warning); }
+  .badge-good  { background: color-mix(in srgb, var(--status-good) 18%, transparent); color: var(--status-good); }
+  .badge-warn  { background: color-mix(in srgb, var(--status-warning) 22%, transparent); color: #8a5a00; }
+  .badge-crit  { background: color-mix(in srgb, var(--status-critical) 18%, transparent); color: var(--status-critical); }
+  @media (prefers-color-scheme: dark) {
+    .badge-warn { color: var(--status-warning); }
+  }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot-live { background: var(--status-good); }
+  .dot-stale { background: var(--status-critical); }
+
+  button {
+    font: inherit; font-weight: 600; border-radius: 8px; border: 1px solid var(--border);
+    padding: 8px 16px; cursor: pointer; background: var(--surface-2); color: var(--text-primary);
+  }
+  button.primary { background: var(--series-up); color: #fff; border-color: transparent; }
+  button.danger  { background: var(--status-critical); color: #fff; border-color: transparent; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .stale-banner {
+    display: none;
+    background: color-mix(in srgb, var(--status-critical) 14%, var(--surface-1));
+    border: 1px solid var(--status-critical); color: var(--status-critical);
+    padding: 10px 16px; border-radius: 10px; margin-bottom: 16px; font-weight: 600;
+  }
+  .stale-banner.show { display: block; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .card h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700;
+    color: var(--text-muted); margin: 0 0 12px;
+  }
+  .stat { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat-sub { color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
+
+  .meter-track {
+    height: 22px; border-radius: 6px; overflow: hidden; display: flex;
+    border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .meter-up   { background: var(--series-up); }
+  .meter-down { background: var(--series-down); }
+  .meter-labels { display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px; color: var(--text-secondary); }
+  .meter-labels .up   { color: var(--series-up); font-weight: 700; }
+  .meter-labels .down { color: var(--series-down); font-weight: 700; }
+
+  .skew-track {
+    position: relative; height: 14px; border-radius: 7px; background: var(--diverging-mid);
+    border: 1px solid var(--border); margin-top: 8px;
+  }
+  .skew-fill { position: absolute; top: 0; bottom: 0; width: 3px; border-radius: 2px; background: var(--text-muted); }
+  .skew-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase;
+       letter-spacing: .04em; padding: 4px 6px; border-bottom: 1px solid var(--gridline); }
+  td { padding: 5px 6px; border-bottom: 1px solid var(--gridline); }
+  tr:last-child td { border-bottom: none; }
+  .tok-up   { color: var(--series-up); font-weight: 700; }
+  .tok-down { color: var(--series-down); font-weight: 700; }
+  .ladder-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .total-row { font-weight: 700; padding-top: 8px; }
+
+  .event-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+  .event-list li { padding: 6px 0; border-bottom: 1px solid var(--gridline); font-size: 13px; display: flex; gap: 8px; }
+  .event-list li:last-child { border-bottom: none; }
+  .event-time { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .empty { color: var(--text-muted); font-size: 13px; }
+
+  details.setup { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 18px; }
+  details.setup summary { cursor: pointer; padding: 14px 18px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
+  details.setup summary::-webkit-details-marker { display: none; }
+  details.setup summary::before { content: "▸"; color: var(--text-muted); transition: transform .15s; }
+  details.setup[open] summary::before { transform: rotate(90deg); }
+  .setup-body { padding: 0 18px 18px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+  .field input[type=text], .field input[type=password], .field input[type=number] {
+    font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text-primary);
+  }
+  .field .hint { font-size: 11px; color: var(--text-muted); }
+  .set-badge { font-size: 11px; color: var(--status-good); font-weight: 700; }
+  .form-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
+  .save-msg { font-size: 13px; color: var(--text-secondary); }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; }
+  .warn-text { color: var(--status-critical); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Polymarket MM Bot</h1>
+    <span id="mode-badge" class="badge badge-dry">Dry Run</span>
+    <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)">
+      <span id="live-dot" class="dot dot-stale"></span><span id="live-text">no data yet</span>
+    </span>
+    <button id="start-btn" class="primary">Start Bot</button>
+    <button id="stop-btn" class="danger" style="display:none">Stop Bot</button>
+  </header>
+
+  <div id="stale-banner" class="stale-banner">⚠ No update from the bot in a while — it may have stopped or crashed. Check the terminal running the server.</div>
+
+  <details class="setup" id="setup" open>
+    <summary>Setup &amp; Credentials</summary>
+    <div class="setup-body">
+      <form id="config-form">
+        <div class="form-grid">
+          <div class="field">
+            <label>Private Key <span class="set-badge" data-set="POLY_PRIVATE_KEY" style="display:none">already set</span></label>
+            <input type="password" name="POLY_PRIVATE_KEY" autocomplete="off" placeholder="0x...">
+          </div>
+          <div class="field">
+            <label>CLOB API Key <span class="set-badge" data-set="POLY_API_KEY" style="display:none">already set</span></label>
+            <input type="password" name="POLY_API_KEY" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>CLOB API Secret <span class="set-badge" data-set="POLY_API_SECRET" style="display:none">already set</span></label>
+            <input type="password" name="POLY_API_SECRET" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>CLOB API Passphrase <span class="set-badge" data-set="POLY_API_PASSPHRASE" style="display:none">already set</span></label>
+            <input type="password" name="POLY_API_PASSPHRASE" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Funder / Wallet Address</label>
+            <input type="text" name="POLY_FUNDER_ADDRESS" placeholder="0x...">
+          </div>
+          <div class="field">
+            <label>Polygon RPC URL</label>
+            <input type="text" name="POLY_POLYGON_RPC_URL" placeholder="https://...">
+            <span class="hint">Needed for redemption. Use a real provider (Alchemy/Infura/QuickNode) once live.</span>
+          </div>
+          <div class="field">
+            <label>Capital per window (USD)</label>
+            <input type="number" name="POLY_CAPITAL_PER_WINDOW_USD" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>Imbalance ceiling (shares)</label>
+            <input type="number" name="POLY_IMBALANCE_CEILING_SHARES" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>Ladder levels per side</label>
+            <input type="number" name="POLY_N_LADDER_LEVELS" min="1" step="1">
+          </div>
+          <div class="field">
+            <label>Pull quotes N sec before close</label>
+            <input type="number" name="POLY_PULL_QUOTE_SECONDS" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>Redemption max retry attempts</label>
+            <input type="number" name="POLY_REDEMPTION_MAX_ATTEMPTS" min="1" step="1">
+          </div>
+          <div class="field">
+            <label>Max concurrent windows</label>
+            <input type="number" name="POLY_MAX_CONCURRENT_WINDOWS" min="1" step="1">
+          </div>
+        </div>
+        <div class="form-actions">
+          <div class="checkbox-row">
+            <input type="checkbox" id="dry-run-checkbox" checked>
+            <label for="dry-run-checkbox">Dry run (no real orders placed)</label>
+          </div>
+          <button type="submit">Save Settings</button>
+          <span id="save-msg" class="save-msg"></span>
+        </div>
+        <p class="warn-text">This server binds to localhost only, but still runs on this machine — anyone with access to it can read your saved credentials from <code>.env</code>.</p>
+      </form>
+    </div>
+  </details>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Window</h2>
+      <div id="window-slug" class="stat">—</div>
+      <div id="window-sub" class="stat-sub">no window yet</div>
+    </div>
+
+    <div class="card">
+      <h2>Live Midpoint</h2>
+      <div class="meter-track">
+        <div id="meter-up" class="meter-up" style="width:50%"></div>
+        <div id="meter-down" class="meter-down" style="width:50%"></div>
+      </div>
+      <div class="meter-labels"><span class="up" id="up-pct">Up 50%</span><span class="down" id="down-pct">Down 50%</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Inventory &amp; Skew</h2>
+      <div class="stat-sub">Up <b id="up-shares">0</b> &nbsp;·&nbsp; Down <b id="down-shares">0</b> &nbsp;·&nbsp; Net <b id="net-shares">0</b></div>
+      <div class="skew-track">
+        <div id="skew-bar" class="skew-bar"></div>
+        <div class="skew-fill" style="left:50%"></div>
+      </div>
+      <div class="meter-labels"><span>Down-heavy</span><span id="skew-val">0.00</span><span>Up-heavy</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Redemption</h2>
+      <div id="redemption-last" class="stat-sub">no redemptions yet</div>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+        <span id="pending-badge" class="badge badge-dry" style="display:none"></span>
+        <span id="exhausted-badge" class="badge badge-crit" style="display:none"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <h2>Ladder</h2>
+    <div class="ladder-cols">
+      <div>
+        <table>
+          <thead><tr><th class="tok-up">Up</th><th>Price</th><th>Size</th></tr></thead>
+          <tbody id="ladder-up"><tr><td colspan="3" class="empty">no resting levels</td></tr></tbody>
+        </table>
+      </div>
+      <div>
+        <table>
+          <thead><tr><th class="tok-down">Down</th><th>Price</th><th>Size</th></tr></thead>
+          <tbody id="ladder-down"><tr><td colspan="3" class="empty">no resting levels</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="total-row" id="ladder-total">Total resting: $0.00</div>
+  </div>
+
+  <div class="card">
+    <h2>Recent Events</h2>
+    <ul id="event-list" class="event-list"><li class="empty">nothing yet</li></ul>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmtPct = (p) => (p * 100).toFixed(1) + "%";
+const fmtCents = (p) => Math.round(p * 100) + "¢";
+const fmtAgo = (ts) => {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  if (s < 60) return s + "s ago";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  return Math.floor(s / 3600) + "h ago";
+};
+const fmtCountdown = (s) => {
+  s = Math.max(0, Math.round(s));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+};
+
+let running = false;
+let runningKnown = false; // avoids fighting a manual expand/collapse on every poll
+
+async function loadConfig() {
+  const res = await fetch("/api/config");
+  const cfg = await res.json();
+  for (const el of document.querySelectorAll("#config-form input[name]")) {
+    if (el.type === "password") continue;
+    if (cfg[el.name] !== undefined && cfg[el.name] !== "") el.value = cfg[el.name];
+  }
+  for (const badge of document.querySelectorAll(".set-badge")) {
+    const key = badge.dataset.set;
+    badge.style.display = cfg[key] && cfg[key].set ? "inline" : "none";
+  }
+  $("dry-run-checkbox").checked = cfg.POLY_DRY_RUN !== "false";
+  setRunning(!!cfg.running);
+}
+
+function setRunning(isRunning) {
+  const changed = !runningKnown || isRunning !== running;
+  running = isRunning;
+  runningKnown = true;
+  $("start-btn").style.display = running ? "none" : "inline-block";
+  $("stop-btn").style.display = running ? "inline-block" : "none";
+  // Only snap the panel open/closed on an actual start/stop transition -
+  // this runs on every 1.5s poll, so doing it unconditionally would fight
+  // the user's own manual expand/collapse click.
+  if (changed) $("setup").open = !running;
+}
+
+$("config-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {};
+  for (const el of document.querySelectorAll("#config-form input[name]")) {
+    body[el.name] = el.value;
+  }
+  body.POLY_DRY_RUN = $("dry-run-checkbox").checked ? "true" : "false";
+  const res = await fetch("/api/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  $("save-msg").textContent = res.ok ? "Saved." : "Failed to save.";
+  for (const el of document.querySelectorAll('#config-form input[type=password]')) el.value = "";
+  await loadConfig();
+  setTimeout(() => { $("save-msg").textContent = ""; }, 3000);
+});
+
+$("start-btn").addEventListener("click", async () => {
+  $("start-btn").disabled = true;
+  const res = await fetch("/api/start", { method: "POST" });
+  const data = await res.json();
+  $("start-btn").disabled = false;
+  if (data.status === "error") {
+    $("save-msg").textContent = "Could not start: " + data.message;
+    $("setup").open = true;
+    return;
+  }
+  setRunning(true);
+});
+
+$("stop-btn").addEventListener("click", async () => {
+  $("stop-btn").disabled = true;
+  await fetch("/api/stop", { method: "POST" });
+  $("stop-btn").disabled = false;
+  setRunning(false);
+});
+
+function renderState(state) {
+  const now = Date.now() / 1000;
+  const isStale = !state.generated_at || (now - state.generated_at) > 10;
+  $("stale-banner").classList.toggle("show", isStale && running);
+  $("live-dot").className = "dot " + (isStale ? "dot-stale" : "dot-live");
+  $("live-text").textContent = state.generated_at ? "updated " + fmtAgo(state.generated_at) : "no data yet";
+
+  const badge = $("mode-badge");
+  if (state.dry_run === false) {
+    badge.textContent = "LIVE"; badge.className = "badge badge-live";
+  } else {
+    badge.textContent = "Dry Run"; badge.className = "badge badge-dry";
+  }
+
+  if (state.window) {
+    $("window-slug").textContent = state.window.slug.replace("btc-updown-5m-", "");
+    $("window-sub").textContent = "closes in " + fmtCountdown(state.window.seconds_remaining);
+  } else {
+    $("window-slug").textContent = "—";
+    $("window-sub").textContent = "no window yet";
+  }
+
+  const mid = state.midpoint_up;
+  if (mid !== null && mid !== undefined) {
+    $("meter-up").style.width = (mid * 100) + "%";
+    $("meter-down").style.width = ((1 - mid) * 100) + "%";
+    $("up-pct").textContent = "Up " + fmtPct(mid);
+    $("down-pct").textContent = "Down " + fmtPct(1 - mid);
+  }
+
+  const inv = state.inventory || { up_shares: 0, down_shares: 0, net_shares: 0 };
+  $("up-shares").textContent = inv.up_shares.toFixed(1);
+  $("down-shares").textContent = inv.down_shares.toFixed(1);
+  $("net-shares").textContent = inv.net_shares.toFixed(1);
+
+  const skew = state.skew || 0;
+  const skewBar = $("skew-bar");
+  const pct = Math.min(1, Math.abs(skew)) * 50;
+  if (skew >= 0) {
+    skewBar.style.left = "50%"; skewBar.style.width = pct + "%";
+    skewBar.style.background = "var(--diverging-pos)";
+  } else {
+    skewBar.style.left = (50 - pct) + "%"; skewBar.style.width = pct + "%";
+    skewBar.style.background = "var(--diverging-neg)";
+  }
+  $("skew-val").textContent = skew.toFixed(2);
+
+  const ladder = state.ladder || { levels: [], total_cost_usd: 0 };
+  const upRows = ladder.levels.filter(l => l.token === "UP").sort((a, b) => b.price - a.price);
+  const downRows = ladder.levels.filter(l => l.token === "DOWN").sort((a, b) => b.price - a.price);
+  const renderRows = (rows) => rows.length
+    ? rows.map(l => `<tr><td></td><td>${fmtCents(l.price)}</td><td>${l.size.toFixed(2)}</td></tr>`).join("")
+    : '<tr><td colspan="3" class="empty">no resting levels</td></tr>';
+  $("ladder-up").innerHTML = renderRows(upRows);
+  $("ladder-down").innerHTML = renderRows(downRows);
+  $("ladder-total").textContent = "Total resting: $" + ladder.total_cost_usd.toFixed(2);
+
+  const redemption = state.redemption || { last: null, pending_count: 0, exhausted: [] };
+  $("redemption-last").textContent = redemption.last
+    ? `${redemption.last.slug.replace("btc-updown-5m-", "")} → ${redemption.last.tx_hash.slice(0, 10)}… (${fmtAgo(redemption.last.at)})`
+    : "no redemptions yet";
+  const pendingBadge = $("pending-badge");
+  if (redemption.pending_count > 0) {
+    pendingBadge.style.display = "inline-flex"; pendingBadge.className = "badge badge-warn";
+    pendingBadge.textContent = redemption.pending_count + " pending retry";
+  } else {
+    pendingBadge.style.display = "none";
+  }
+  const exhaustedBadge = $("exhausted-badge");
+  if (redemption.exhausted.length > 0) {
+    exhaustedBadge.style.display = "inline-flex";
+    exhaustedBadge.textContent = redemption.exhausted.length + " need manual redemption";
+  } else {
+    exhaustedBadge.style.display = "none";
+  }
+
+  const events = state.recent_events || [];
+  $("event-list").innerHTML = events.length
+    ? events.slice().reverse().map(e => `<li><span class="event-time">${fmtAgo(e.at)}</span><span>${e.message}</span></li>`).join("")
+    : '<li class="empty">nothing yet</li>';
+}
+
+async function pollState() {
+  try {
+    const res = await fetch("/api/state");
+    const state = await res.json();
+    if (state.running !== undefined) setRunning(state.running);
+    renderState(state);
+  } catch (e) {
+    $("live-dot").className = "dot dot-stale";
+    $("live-text").textContent = "server unreachable";
+  }
+}
+
+loadConfig();
+pollState();
+setInterval(pollState, 1500);
+setInterval(loadConfig, 5000);
+</script>
+</body>
+</html>

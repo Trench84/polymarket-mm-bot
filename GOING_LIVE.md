@@ -1,11 +1,19 @@
 # Going Live Checklist
 
-The bot has been built, unit tested (56 tests), and dry-run smoke tested against the
+The bot has been built, unit tested (81 tests), and dry-run smoke tested against the
 live market. What it has **not** been tested against is your real account — I have no
 credentials, so `LiveClobClient` and `RedemptionClient`'s parsing of real API responses
 is verified against Polymarket's documented shapes, not an actual authenticated call.
 This checklist exists to close that gap deliberately, in small/cheap/reversible steps,
 before any meaningful capital is on the line.
+
+Steps below show the CLI (`uv run python -m polymarket_mm_bot.bot`), but everything
+also works from the dashboard (`uv run python -m polymarket_mm_bot.server`, then
+`http://127.0.0.1:8765`) — Start/Stop replace the CLI/`.stop` flag, and the Setup panel
+replaces editing `.env` by hand. The dashboard binds to localhost only, but it does hold
+your credentials in `.env` on this machine once saved — same trust boundary as the CLI,
+just with a form instead of a text editor. Don't expose port 8765 to anything but this
+machine (no port-forwarding, no tunneling it to another device).
 
 Work through it in order. Don't skip ahead because a step "should" work.
 
