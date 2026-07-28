@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Protocol
 
 from web3 import Web3
@@ -133,3 +135,51 @@ class RedemptionClient:
         signed = self._account.sign_transaction(transaction)
         tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
         return tx_hash.hex()
+
+
+class RedemptionRetryQueue:
+    """Tracks condition_ids whose redemption failed, so the bot can retry
+    them on later rollovers instead of losing track after one attempt.
+
+    Bounded by max_attempts - a condition that keeps failing past that count
+    stops being auto-retried (nothing is lost; it's still redeemable
+    on-chain forever, it just needs a manual look). Optionally persists to a
+    JSON file so pending retries survive a bot restart, since a redemption
+    failure most likely means "not yet resolved on-chain" or "RPC hiccup",
+    not "will never succeed" - losing track of it on restart would mean
+    real, redeemable USDC sitting unclaimed with nothing watching it.
+    """
+
+    def __init__(self, max_attempts: int, state_path: Path | None = None) -> None:
+        self._max_attempts = max_attempts
+        self._state_path = state_path
+        self._attempts: dict[str, int] = {}
+        if state_path is not None and state_path.exists():
+            self._attempts = json.loads(state_path.read_text())
+
+    def _persist(self) -> None:
+        if self._state_path is not None:
+            self._state_path.write_text(json.dumps(self._attempts))
+
+    def record_failure(self, condition_id: str) -> bool:
+        """Records a failed attempt. Returns True the moment this failure
+        pushes the condition past max_attempts (i.e. exactly once per
+        condition), so callers can log a "giving up" message a single time
+        instead of every subsequent rollover."""
+        self._attempts[condition_id] = self._attempts.get(condition_id, 0) + 1
+        self._persist()
+        return self._attempts[condition_id] == self._max_attempts
+
+    def record_success(self, condition_id: str) -> None:
+        if condition_id in self._attempts:
+            del self._attempts[condition_id]
+            self._persist()
+
+    def attempt_count(self, condition_id: str) -> int:
+        return self._attempts.get(condition_id, 0)
+
+    def pending(self) -> list[str]:
+        return [cid for cid, count in self._attempts.items() if count < self._max_attempts]
+
+    def exhausted(self) -> list[str]:
+        return [cid for cid, count in self._attempts.items() if count >= self._max_attempts]

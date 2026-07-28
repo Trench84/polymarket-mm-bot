@@ -22,6 +22,7 @@ class Config:
     n_ladder_levels: int = 4
     imbalance_ceiling_shares: float = 200.0
     pull_quote_seconds_before_close: float = 8.0
+    redemption_max_attempts: int = 5
     dry_run: bool = True
 
     @staticmethod
@@ -53,5 +54,6 @@ class Config:
             n_ladder_levels=int(_get("POLY_N_LADDER_LEVELS", "4")),
             imbalance_ceiling_shares=float(_get("POLY_IMBALANCE_CEILING_SHARES", "200")),
             pull_quote_seconds_before_close=float(_get("POLY_PULL_QUOTE_SECONDS", "8")),
+            redemption_max_attempts=int(_get("POLY_REDEMPTION_MAX_ATTEMPTS", "5")),
             dry_run=dry_run,
         )

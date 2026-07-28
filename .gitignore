@@ -3,6 +3,8 @@ __pycache__/
 .venv/
 venv/
 .env
+.stop
+.redemption_queue.json
 data/
 output/
 .DS_Store

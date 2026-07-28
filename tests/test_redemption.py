@@ -3,6 +3,7 @@ from web3 import Web3
 from polymarket_mm_bot.redemption import (
     BINARY_INDEX_SETS,
     DryRunRedeemer,
+    RedemptionRetryQueue,
     build_redeem_transaction,
     should_attempt_redemption,
 )
@@ -77,3 +78,78 @@ def test_dry_run_redeemer_logs_each_call_separately():
     redeemer.redeem(CONDITION_ID)
     redeemer.redeem(CONDITION_ID)
     assert redeemer.redeemed_log == [CONDITION_ID, CONDITION_ID]
+
+
+def test_retry_queue_starts_with_nothing_pending():
+    queue = RedemptionRetryQueue(max_attempts=3)
+    assert queue.pending() == []
+    assert queue.exhausted() == []
+    assert queue.attempt_count(CONDITION_ID) == 0
+
+
+def test_retry_queue_record_failure_tracks_attempt_count():
+    queue = RedemptionRetryQueue(max_attempts=3)
+    queue.record_failure(CONDITION_ID)
+    assert queue.attempt_count(CONDITION_ID) == 1
+    assert queue.pending() == [CONDITION_ID]
+
+
+def test_retry_queue_record_failure_returns_false_before_max_attempts():
+    queue = RedemptionRetryQueue(max_attempts=3)
+    assert queue.record_failure(CONDITION_ID) is False
+    assert queue.record_failure(CONDITION_ID) is False
+
+
+def test_retry_queue_record_failure_returns_true_on_crossing_max_attempts():
+    queue = RedemptionRetryQueue(max_attempts=2)
+    assert queue.record_failure(CONDITION_ID) is False
+    assert queue.record_failure(CONDITION_ID) is True
+
+
+def test_retry_queue_exhausted_items_excluded_from_pending():
+    queue = RedemptionRetryQueue(max_attempts=2)
+    queue.record_failure(CONDITION_ID)
+    queue.record_failure(CONDITION_ID)
+    assert queue.pending() == []
+    assert queue.exhausted() == [CONDITION_ID]
+
+
+def test_retry_queue_record_success_clears_condition():
+    queue = RedemptionRetryQueue(max_attempts=3)
+    queue.record_failure(CONDITION_ID)
+    queue.record_success(CONDITION_ID)
+    assert queue.pending() == []
+    assert queue.attempt_count(CONDITION_ID) == 0
+
+
+def test_retry_queue_record_success_on_untracked_condition_is_a_noop():
+    queue = RedemptionRetryQueue(max_attempts=3)
+    queue.record_success("never-failed")  # should not raise
+    assert queue.pending() == []
+
+
+def test_retry_queue_persists_across_reload(tmp_path):
+    state_path = tmp_path / "redemption_queue.json"
+    queue = RedemptionRetryQueue(max_attempts=5, state_path=state_path)
+    queue.record_failure(CONDITION_ID)
+
+    reloaded = RedemptionRetryQueue(max_attempts=5, state_path=state_path)
+    assert reloaded.attempt_count(CONDITION_ID) == 1
+    assert reloaded.pending() == [CONDITION_ID]
+
+
+def test_retry_queue_persists_success_removal_across_reload(tmp_path):
+    state_path = tmp_path / "redemption_queue.json"
+    queue = RedemptionRetryQueue(max_attempts=5, state_path=state_path)
+    queue.record_failure(CONDITION_ID)
+    queue.record_success(CONDITION_ID)
+
+    reloaded = RedemptionRetryQueue(max_attempts=5, state_path=state_path)
+    assert reloaded.pending() == []
+    assert reloaded.attempt_count(CONDITION_ID) == 0
+
+
+def test_retry_queue_with_no_state_path_does_not_touch_disk(tmp_path):
+    queue = RedemptionRetryQueue(max_attempts=5, state_path=None)
+    queue.record_failure(CONDITION_ID)
+    assert list(tmp_path.iterdir()) == []
