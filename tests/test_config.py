@@ -17,6 +17,7 @@ def test_defaults_in_dry_run_mode(monkeypatch, tmp_path):
     assert config.capital_per_window_usd == 100.0
     assert config.n_ladder_levels == 4
     assert config.clob_host == "https://clob.polymarket.com"
+    assert config.polygon_rpc_url == "https://polygon-rpc.com"
 
 
 def test_missing_credentials_raise_when_not_dry_run(monkeypatch, tmp_path):

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import ApiCreds, OrderArgs
+from py_clob_client.clob_types import ApiCreds, OrderArgs, TradeParams
 from py_clob_client.constants import POLYGON
 from py_clob_client.order_builder.constants import BUY
 
@@ -24,11 +24,18 @@ class PlacedOrder:
     size: float
 
 
+@dataclass(frozen=True)
+class Fill:
+    token_id: str
+    size: float
+
+
 class ClobClientProtocol(Protocol):
     def place_order(self, intent: OrderIntent) -> PlacedOrder: ...
     def cancel_order(self, order_id: str) -> None: ...
     def cancel_all(self) -> None: ...
     def get_open_orders(self) -> list[PlacedOrder]: ...
+    def get_fills(self, condition_id: str, after_ts: int) -> list[Fill]: ...
 
 
 class DryRunClobClient:
@@ -59,6 +66,12 @@ class DryRunClobClient:
 
     def get_open_orders(self) -> list[PlacedOrder]:
         return list(self._orders.values())
+
+    def get_fills(self, condition_id: str, after_ts: int) -> list[Fill]:
+        # Dry-run never submits real orders, so there is never a real fill to
+        # report - inventory/skew/redemption are only meaningfully exercised
+        # in live mode. Returning [] here is accurate, not a stub.
+        return []
 
 
 class LiveClobClient:
@@ -107,3 +120,10 @@ class LiveClobClient:
             )
             for o in raw_orders
         ]
+
+    def get_fills(self, condition_id: str, after_ts: int) -> list[Fill]:
+        # Field names (asset_id, size) match get_orders' row shape from the
+        # same authenticated API family; not independently confirmed against
+        # a live trade history since that needs real account credentials.
+        raw_trades = self._client.get_trades(TradeParams(market=condition_id, after=after_ts))
+        return [Fill(token_id=t.get("asset_id", ""), size=float(t.get("size", 0.0))) for t in raw_trades]

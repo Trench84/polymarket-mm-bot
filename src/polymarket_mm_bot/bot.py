@@ -14,10 +14,18 @@ from polymarket_mm_bot.market_data import MarketDataClient
 from polymarket_mm_bot.market_tracker import MarketTracker
 from polymarket_mm_bot.order_manager import OrderManager
 from polymarket_mm_bot.quote_engine import compute_ladder
+from polymarket_mm_bot.redemption import DryRunRedeemer, RedemptionClient, should_attempt_redemption
 from polymarket_mm_bot.window_closer import WindowCloser, should_pull_quotes
 
 logger = logging.getLogger("polymarket_mm_bot")
 POLL_SECONDS = 2.0
+
+# Polygon mainnet addresses for Polymarket's ConditionalTokens (CTF) and
+# USDC.e collateral - fixed platform constants, not per-user config. Verified
+# live against py-clob-client's own contract config while building the
+# redemption module.
+POLYGON_CONDITIONAL_TOKENS_ADDRESS = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
+POLYGON_COLLATERAL_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
 
 
 async def run(config: Config, flag_path: Path) -> None:
@@ -31,6 +39,16 @@ async def run(config: Config, flag_path: Path) -> None:
             api_secret=config.api_secret,
             api_passphrase=config.api_passphrase,
             funder=config.funder_address,
+        )
+    )
+    redeemer = (
+        DryRunRedeemer()
+        if config.dry_run
+        else RedemptionClient(
+            rpc_url=config.polygon_rpc_url,
+            private_key=config.private_key,
+            conditional_tokens_address=POLYGON_CONDITIONAL_TOKENS_ADDRESS,
+            collateral_address=POLYGON_COLLATERAL_ADDRESS,
         )
     )
     market_data = MarketDataClient(host=config.clob_host)
@@ -51,6 +69,17 @@ async def run(config: Config, flag_path: Path) -> None:
         now = time.time()
         new_start = tracker.current_window_start(now)
         if window is None or new_start != window.start_ts:
+            previous_window = window
+            if previous_window is not None and should_attempt_redemption(inventory.up_shares, inventory.down_shares):
+                try:
+                    tx_hash = redeemer.redeem(previous_window.condition_id)
+                    logger.info("redeemed %s -> %s", previous_window.slug, tx_hash)
+                except Exception:
+                    # Best-effort: a failed redemption shouldn't stop the bot from
+                    # quoting new windows. Winning positions stay redeemable
+                    # indefinitely, so this can be retried later (manually or on
+                    # a future run) without losing anything but time.
+                    logger.exception("redemption failed for %s, will need manual retry", previous_window.slug)
             window = tracker.fetch_window(new_start)
             inventory.reset()
             if window is None:
@@ -63,6 +92,9 @@ async def run(config: Config, flag_path: Path) -> None:
                 logger.info("pulled quotes for %s ahead of resolution", window.slug)
             await asyncio.sleep(POLL_SECONDS)
             continue
+
+        fills = order_client.get_fills(window.condition_id, window.start_ts)
+        inventory.sync_from_fills(fills, window.up_token_id, window.down_token_id)
 
         midpoint_up = market_data.get_midpoint(window.up_token_id)
         skew = inventory.skew(config.imbalance_ceiling_shares)

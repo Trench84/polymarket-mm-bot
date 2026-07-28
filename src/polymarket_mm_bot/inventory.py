@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from polymarket_mm_bot.clob_client import Fill
 from polymarket_mm_bot.quote_engine import Token
 
 
@@ -31,3 +32,13 @@ class InventoryTracker:
     def reset(self) -> None:
         self.up_shares = 0.0
         self.down_shares = 0.0
+
+    def sync_from_fills(self, fills: list[Fill], up_token_id: str, down_token_id: str) -> None:
+        """Recomputes shares from a fresh, authoritative fill list rather than
+        accumulating incremental events - avoids double-counting or missed
+        fills across polls, at the cost of re-summing the whole window's
+        fills each call (cheap for the fill counts these 5-min windows see)."""
+        self.reset()
+        for fill in fills:
+            token: Token = "UP" if fill.token_id == up_token_id else "DOWN"
+            self.record_fill(token, fill.size)

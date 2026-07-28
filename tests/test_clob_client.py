@@ -25,3 +25,9 @@ def test_cancel_all_clears_every_open_order():
     client.place_order(OrderIntent(token_id="down-token", price=0.44, size=8.0))
     client.cancel_all()
     assert client.get_open_orders() == []
+
+
+def test_dry_run_get_fills_is_always_empty():
+    client = DryRunClobClient()
+    client.place_order(OrderIntent(token_id="up-token", price=0.53, size=10.0))
+    assert client.get_fills(condition_id="0xabc", after_ts=0) == []

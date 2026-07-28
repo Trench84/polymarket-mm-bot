@@ -16,6 +16,7 @@ class Config:
     funder_address: str
     clob_host: str = "https://clob.polymarket.com"
     gamma_host: str = "https://gamma-api.polymarket.com"
+    polygon_rpc_url: str = "https://polygon-rpc.com"
     capital_per_window_usd: float = 100.0
     max_concurrent_windows: int = 1
     n_ladder_levels: int = 4
@@ -46,6 +47,7 @@ class Config:
             funder_address=_get_required_unless_dry_run("POLY_FUNDER_ADDRESS", dry_run),
             clob_host=_get("POLY_CLOB_HOST", "https://clob.polymarket.com"),
             gamma_host=_get("POLY_GAMMA_HOST", "https://gamma-api.polymarket.com"),
+            polygon_rpc_url=_get("POLY_POLYGON_RPC_URL", "https://polygon-rpc.com"),
             capital_per_window_usd=float(_get("POLY_CAPITAL_PER_WINDOW_USD", "100")),
             max_concurrent_windows=int(_get("POLY_MAX_CONCURRENT_WINDOWS", "1")),
             n_ladder_levels=int(_get("POLY_N_LADDER_LEVELS", "4")),

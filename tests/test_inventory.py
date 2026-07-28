@@ -1,5 +1,6 @@
 import pytest
 
+from polymarket_mm_bot.clob_client import Fill
 from polymarket_mm_bot.inventory import InventoryTracker
 
 
@@ -40,3 +41,26 @@ def test_reset_clears_position():
     inv.record_fill("UP", 100.0)
     inv.reset()
     assert inv.net_shares == 0.0
+
+
+def test_sync_from_fills_recomputes_shares_by_token_id():
+    inv = InventoryTracker()
+    fills = [
+        Fill(token_id="up-token", size=10.0),
+        Fill(token_id="down-token", size=4.0),
+        Fill(token_id="up-token", size=5.0),
+    ]
+    inv.sync_from_fills(fills, up_token_id="up-token", down_token_id="down-token")
+    assert inv.up_shares == pytest.approx(15.0)
+    assert inv.down_shares == pytest.approx(4.0)
+
+
+def test_sync_from_fills_overwrites_previous_state_rather_than_accumulating():
+    inv = InventoryTracker()
+    inv.record_fill("UP", 999.0)
+    inv.sync_from_fills(
+        [Fill(token_id="up-token", size=2.0)],
+        up_token_id="up-token",
+        down_token_id="down-token",
+    )
+    assert inv.up_shares == pytest.approx(2.0)
