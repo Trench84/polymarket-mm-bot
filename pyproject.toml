@@ -1,0 +1,11 @@
+[project]
+name = "polymarket-mm-bot"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.4.6",
+    "pandas>=3.0.5",
+    "pyarrow>=25.0.0",
+    "requests>=2.34.2",
+]
