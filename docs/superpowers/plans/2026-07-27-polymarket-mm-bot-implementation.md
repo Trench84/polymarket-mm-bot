@@ -1515,12 +1515,18 @@ git push
   WindowCloser (design's pull-before-close + redemption placeholder — redemption itself is
   intentionally out of scope for this plan, see below), KillSwitch + dry-run (design's error
   handling / testing sections), Config (design's risk parameters, all tunable). All covered.
-- **Known gap carried forward, not silently dropped:** the design doc's WindowCloser also
-  "redeems settled positions after resolution" — this plan's `WindowCloser` only pulls
-  quotes, it does not yet call the CTF redemption contract. Redemption needs on-chain
-  contract calls (not part of `py-clob-client`'s REST surface) and real funds/positions to
-  test against, so it's deliberately left as a follow-up task once Task 10's dry run has
-  been validated and the operator is ready to move toward `dry_run=False`.
+- **Known gap carried forward, not silently dropped (closed 2026-07-27):** the design doc's
+  WindowCloser also "redeems settled positions after resolution" — this plan's
+  `WindowCloser` only pulled quotes; redemption was deliberately deferred as a follow-up.
+  It has since been built as a separate `RedemptionClient`/`DryRunRedeemer`
+  (`src/polymarket_mm_bot/redemption.py`, Task 11, not tracked in this file's task list
+  since it was added after this plan was executed) and wired into `bot.py`'s window-rollover
+  handling. Building it surfaced a second, more important gap: `InventoryTracker.record_fill`
+  was never called anywhere in the original Task 10 wiring, so `skew` and the redemption
+  trigger both silently never fired in live mode — Task 10's dry-run smoke test couldn't
+  catch this since dry-run mode legitimately has zero real fills. Fixed by adding
+  `ClobClientProtocol.get_fills()` and `InventoryTracker.sync_from_fills()`, polled each
+  loop iteration before computing skew.
 - **Placeholder scan:** one intentional, explicitly-flagged placeholder exists in Task 10
   Step 1 (the time-read one-liner) and is fixed in Step 2 before the task is considered
   done — called out rather than silently left in, per the engineer running this plan should
